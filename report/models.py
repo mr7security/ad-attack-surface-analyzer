@@ -32,27 +32,32 @@ class Finding:
     references:  List[str]      = field(default_factory=list)
     analyzer:    str            = ""
     mitre_id:    Optional[str]  = None
-    extra:       Dict[str,Any]  = field(default_factory=dict)
+    extra:       Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class AnalysisReport:
-    domain:           str
-    dc_hostname:      str
-    scan_time_utc:    str
-    os_version:       str            = ""
-    functional_level: int            = 0
-    findings:         List[Finding]  = field(default_factory=list)
-    risk_score:       int            = 0
-    risk_label:       str            = "Unknown"
-    summary:          Dict[str,int]  = field(default_factory=dict)
+    domain:          str
+    dc_hostname:     str
+    scan_time_utc:   str
+    os_version:      str            = ""
+    functional_level: int           = 0
+    findings:        List[Finding]  = field(default_factory=list)
+    risk_score:      int            = 0
+    risk_label:      str            = "Low"
+    summary:         Dict[str, int] = field(default_factory=dict)
 
     def compute_risk(self) -> None:
-        """
-        TODO (Devin): use RISK_WEIGHTS from config.
-        score = min(100, sum(weight*count per severity))
-        label: >=80=Critical, >=60=High, >=40=Medium, else=Low
-        Sort findings by severity.order ascending.
-        See HANDOFF.md Issue 2.
-        """
-        raise NotImplementedError
+        from config import RISK_WEIGHTS
+        counts: Dict[str, int] = {s.value: 0 for s in Severity}
+        for f in self.findings:
+            counts[f.severity.value] += 1
+        score = sum(RISK_WEIGHTS.get(sev, 0) * cnt for sev, cnt in counts.items())
+        self.risk_score = min(100, score)
+        self.risk_label = (
+            "Critical" if self.risk_score >= 80 else
+            "High"     if self.risk_score >= 60 else
+            "Medium"   if self.risk_score >= 40 else "Low"
+        )
+        self.summary = counts
+        self.findings.sort(key=lambda f: f.severity.order)
